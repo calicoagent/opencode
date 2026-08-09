@@ -26,6 +26,7 @@ import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { usePreviewConfig } from "@/context/preview-config"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
@@ -67,6 +68,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+  const previewConfig = usePreviewConfig()
   const server = useServer()
   const navigate = useNavigate()
   const location = useLocation()
@@ -313,16 +315,22 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
-            command.register("titlebar-home", () => [
-              {
-                id: "home.toggle",
-                title: language.t("home.title"),
-                category: language.t("command.category.view"),
-                keybind: "mod+b",
-                hidden: true,
-                onSelect: toggleHome,
-              },
-            ])
+            // Site mode has exactly one project, so the home route (project
+            // picker) is nothing the user can act on — drop its command too.
+            command.register("titlebar-home", () =>
+              previewConfig.siteMode()
+                ? []
+                : [
+                    {
+                      id: "home.toggle",
+                      title: language.t("home.title"),
+                      category: language.t("command.category.view"),
+                      keybind: "mod+b",
+                      hidden: true,
+                      onSelect: toggleHome,
+                    },
+                  ],
+            )
 
             command.register("tabs", () => {
               const current = currentTab()
@@ -372,28 +380,30 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
-                <TooltipV2
-                  placement="bottom"
-                  value={
-                    <>
-                      {language.t("home.title")}
-                      <KeybindV2 keys={command.keybindParts("home.toggle")} variant="neutral" />
-                    </>
-                  }
-                  class="shrink-0"
-                >
-                  <IconButtonV2
-                    type="button"
-                    variant="ghost-muted"
-                    size="large"
-                    class="!w-9 shrink-0"
-                    icon={<IconV2 name="grid-plus" />}
-                    state={layout.route().type === "home" ? "pressed" : undefined}
-                    onClick={toggleHome}
-                    aria-label={language.t("home.title")}
-                    aria-pressed={layout.route().type === "home"}
-                  />
-                </TooltipV2>
+                <Show when={!previewConfig.siteMode()}>
+                  <TooltipV2
+                    placement="bottom"
+                    value={
+                      <>
+                        {language.t("home.title")}
+                        <KeybindV2 keys={command.keybindParts("home.toggle")} variant="neutral" />
+                      </>
+                    }
+                    class="shrink-0"
+                  >
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={<IconV2 name="grid-plus" />}
+                      state={layout.route().type === "home" ? "pressed" : undefined}
+                      onClick={toggleHome}
+                      aria-label={language.t("home.title")}
+                      aria-pressed={layout.route().type === "home"}
+                    />
+                  </TooltipV2>
+                </Show>
 
                 <TitlebarTabStrip
                   tabs={tabsStore}

@@ -1,0 +1,126 @@
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Effect } from "effect"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { readFile, stat, writeFile } from "node:fs/promises"
+import { isAbsolute, join, normalize, resolve, sep } from "node:path"
+
+/**
+ * Single-page site mode.
+ *
+ * Serves the project directory as a live website at `/preview/*` and exposes
+ * the project's AGENTS.md for reading and writing at `/preview-agents`, so the
+ * browser UI can show the rendered `index.html` next to the chat and let a
+ * non-technical user edit the brief the agent works from.
+ *
+ * The root defaults to the server's working directory and can be pinned with
+ * `OPENCODE_PREVIEW_ROOT` (which is what the Docker image does).
+ */
+export const PREVIEW_PREFIX = "/preview"
+export const PREVIEW_AGENTS_PATH = "/preview-agents"
+export const PREVIEW_CONFIG_PATH = "/preview-config"
+
+const AGENTS_FILE = "AGENTS.md"
+
+/**
+ * Site mode turns the app from a coding tool into a one-page website editor:
+ * the UI skips project and session pickers and drops the user straight into a
+ * chat with the preview open. The Docker image sets this; a normal opencode
+ * install never sees it.
+ */
+export function siteMode() {
+  const value = process.env["OPENCODE_SITE_MODE"]
+  return value === "1" || value === "true"
+}
+
+export function previewRoot() {
+  const configured = process.env["OPENCODE_PREVIEW_ROOT"]
+  return resolve(configured && configured.length > 0 ? configured : process.cwd())
+}
+
+/**
+ * Resolve a request path inside the preview root, refusing anything that
+ * escapes it. Returns null when the path is not contained by the root.
+ */
+export function resolveWithinRoot(root: string, requestPath: string) {
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(requestPath)
+    } catch {
+      return requestPath
+    }
+  })()
+  const relative = normalize(decoded).replace(/^([/\\])+/, "")
+  if (isAbsolute(relative)) return null
+  const target = resolve(join(root, relative))
+  if (target !== root && !target.startsWith(root + sep)) return null
+  return target
+}
+
+function notFound() {
+  return HttpServerResponse.text("Not Found", { status: 404 })
+}
+
+/**
+ * Previewed pages are the user's own site, so they must not inherit the app's
+ * `default-src 'self'` policy — client sites routinely pull fonts, CDN scripts
+ * and images from elsewhere. They are same-origin, so the app can still frame
+ * them.
+ */
+function previewHeaders(file: string) {
+  return new Headers({
+    "content-type": FSUtil.mimeType(file),
+    "cache-control": "no-store",
+  })
+}
+
+async function readCandidate(target: string) {
+  const info = await stat(target).catch(() => null)
+  if (!info) return null
+  const file = info.isDirectory() ? join(target, "index.html") : target
+  const body = await readFile(file).catch(() => null)
+  if (!body) return null
+  return { file, body }
+}
+
+export function servePreviewEffect(request: HttpServerRequest.HttpServerRequest) {
+  return Effect.gen(function* () {
+    const root = previewRoot()
+    const path = new URL(request.url, "http://localhost").pathname
+    const relative = path.slice(PREVIEW_PREFIX.length) || "/"
+    const target = resolveWithinRoot(root, relative)
+    if (!target) return notFound()
+
+    const found = yield* Effect.promise(() => readCandidate(target))
+    if (!found) return notFound()
+
+    return HttpServerResponse.raw(found.body, { headers: previewHeaders(found.file) })
+  })
+}
+
+export function previewConfigEffect() {
+  return Effect.sync(() =>
+    HttpServerResponse.jsonUnsafe(
+      { siteMode: siteMode(), root: previewRoot() },
+      { headers: { "cache-control": "no-store" } },
+    ),
+  )
+}
+
+export function readAgentsEffect() {
+  return Effect.gen(function* () {
+    const file = join(previewRoot(), AGENTS_FILE)
+    const content = yield* Effect.promise(() => readFile(file, "utf8").catch(() => ""))
+    return HttpServerResponse.text(content, {
+      headers: new Headers({ "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }),
+    })
+  })
+}
+
+export function writeAgentsEffect(request: HttpServerRequest.HttpServerRequest) {
+  return Effect.gen(function* () {
+    const body = yield* Effect.orDie(request.text)
+    const file = join(previewRoot(), AGENTS_FILE)
+    yield* Effect.promise(() => writeFile(file, body, "utf8"))
+    return HttpServerResponse.text("ok")
+  })
+}

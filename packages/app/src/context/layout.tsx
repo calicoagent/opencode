@@ -4,6 +4,7 @@ import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
+import { usePreviewConfig } from "./preview-config"
 import { useServerSDK } from "./server-sdk"
 import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
@@ -20,7 +21,13 @@ import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/u
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
 import { type DraftTab, useTabs } from "./tabs"
-import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
+import {
+  closeSessionTab,
+  openSessionTab,
+  previewSessionTab,
+  SESSION_PREVIEW_TAB,
+  type SessionTabs,
+} from "./layout-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -32,6 +39,9 @@ const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 const DEFAULT_REVIEW_PANEL_OPENED = false
+// In site mode the side panel opens on the Preview tab by default so a client
+// sees their site immediately. Everywhere else the panel stays closed.
+const DEFAULT_SITE_MODE_SIDE_PANEL_OPENED = true
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -162,6 +172,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   init: () => {
     const serverSdk = useServerSDK()
     const serverSync = useServerSync()
+    const previewConfig = usePreviewConfig()
     const server = useServer()
     const tabs = useTabs()
     const platform = usePlatform()
@@ -267,6 +278,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
+    // Left unset in the store so the default stays live: /preview-config
+    // usually resolves after the layout store is created.
+    const sidePanelOpenedDefault = () =>
+      previewConfig.siteMode() ? DEFAULT_SITE_MODE_SIDE_PANEL_OPENED : DEFAULT_REVIEW_PANEL_OPENED
+
     const target = Persist.serverGlobal(serverSdk().scope, "layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
       { ...target, migrate },
@@ -283,7 +299,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: DEFAULT_REVIEW_PANEL_OPENED,
+          panelOpened: undefined as boolean | undefined,
         },
         fileTree: {
           opened: false,
@@ -818,7 +834,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           if (typeof file === "string") return file
         })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? sidePanelOpenedDefault())
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
         function setTerminalOpened(next: boolean) {
@@ -844,7 +860,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
 
-          const value = current.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED
+          const value = current.panelOpened ?? sidePanelOpenedDefault()
           if (value === next) {
             if (ephemeral.reviewPanelSource !== nextSource) setEphemeral("reviewPanelSource", nextSource)
             return
@@ -1006,7 +1022,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return {
           tabs,
           active: createMemo(() => tabs().active),
-          all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          all: createMemo(() => tabs().all.filter((tab) => tab !== "review" && tab !== SESSION_PREVIEW_TAB)),
           preview: createMemo(() => ephemeral.sessionTabPreview[key()]),
           setActive(tab: string | undefined) {
             const session = key()

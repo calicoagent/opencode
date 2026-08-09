@@ -68,6 +68,15 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
+import {
+  PREVIEW_AGENTS_PATH,
+  PREVIEW_CONFIG_PATH,
+  PREVIEW_PREFIX,
+  previewConfigEffect,
+  readAgentsEffect,
+  servePreviewEffect,
+  writeAgentsEffect,
+} from "@/server/shared/preview"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
@@ -191,6 +200,16 @@ const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effe
   Layer.provide(authOnlyRouterLayer),
 )
 
+const previewRoute = HttpRouter.use((router) =>
+  Effect.gen(function* () {
+    // The wildcard also matches the bare `/preview`, which serves index.html.
+    yield* router.add("GET", `${PREVIEW_PREFIX}/*`, (request) => servePreviewEffect(request))
+    yield* router.add("GET", PREVIEW_CONFIG_PATH, () => previewConfigEffect())
+    yield* router.add("GET", PREVIEW_AGENTS_PATH, () => readAgentsEffect())
+    yield* router.add("PUT", PREVIEW_AGENTS_PATH, (request) => writeAgentsEffect(request))
+  }),
+).pipe(Layer.provide(authOnlyRouterLayer))
+
 const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -280,6 +299,7 @@ export function createRoutes(
     instanceRoutes,
     serverRoutes,
     docRoute,
+    previewRoute,
     uiRoute,
   ).pipe(
     Layer.provide([

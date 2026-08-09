@@ -1,4 +1,5 @@
 export const SESSION_OPEN_FILE_TAB = "open-file"
+export const SESSION_PREVIEW_TAB = "preview"
 
 export type SessionTabs = {
   active?: string
@@ -42,7 +43,7 @@ export function previewSessionTab(current: SessionTabState, tab: string): Sessio
 
 export function openSessionTab(current: SessionTabState, tab: string): SessionTabState {
   const preview = sessionTabPreview(current)
-  if (tab === "review") {
+  if (tab === "review" || tab === SESSION_PREVIEW_TAB) {
     return {
       tabs: { all: current.tabs.all.filter((item) => item !== tab), active: tab },
       preview,
@@ -80,7 +81,7 @@ export function openSessionTab(current: SessionTabState, tab: string): SessionTa
 }
 
 export function closeSessionTab(current: SessionTabState, tab: string): SessionTabState {
-  if (tab === "review") {
+  if (tab === "review" || tab === SESSION_PREVIEW_TAB) {
     if (current.tabs.active !== tab) return current
     return {
       tabs: { all: current.tabs.all, active: current.tabs.all[0] },

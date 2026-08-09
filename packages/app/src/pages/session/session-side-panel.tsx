@@ -35,6 +35,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
+const previewTabID = "session-side-panel-preview-tab"
 import { SessionContextTab, SortableTab, SortableTabV2, FileVisual } from "@/components/session"
 import { OpenInAppV2 } from "@/components/session/open-in-app-v2"
 import { useCommand } from "@/context/command"
@@ -43,10 +44,13 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
+import { usePreviewConfig } from "@/context/preview-config"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
+import { SessionPreviewTab } from "@/pages/session/preview-tab"
 import {
   SESSION_OPEN_FILE_TAB,
+  SESSION_PREVIEW_TAB,
   createOpenSessionFileTab,
   createSessionTabs,
   getTabReorderIndex,
@@ -84,6 +88,7 @@ export function SessionSidePanel(props: {
 }) {
   const layout = useLayout()
   const settings = useSettings()
+  const previewConfig = usePreviewConfig()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
@@ -180,6 +185,8 @@ export function SessionSidePanel(props: {
     review: reviewTab,
     hasReview: props.canReview,
     fileBrowser: () => !!props.fileBrowserState,
+    // The Preview tab only exists in site mode; elsewhere the panel is unchanged.
+    sitePreview: () => previewConfig.siteMode(),
   })
   const contextOpen = tabState.contextOpen
   const openFileOpen = tabState.openFileOpen
@@ -238,7 +245,7 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty"
+    return active !== "review" && active !== "context" && active !== "empty" && active !== SESSION_PREVIEW_TAB
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
@@ -349,6 +356,11 @@ export function SessionSidePanel(props: {
                                 onCleanup(stop)
                               }}
                             >
+                              <Show when={previewConfig.siteMode()}>
+                                <Tabs.Trigger value={SESSION_PREVIEW_TAB} id={previewTabID}>
+                                  {language.t("session.tab.preview")}
+                                </Tabs.Trigger>
+                              </Show>
                               <Show when={reviewTab() && props.canReview()}>
                                 <Tabs.Trigger
                                   value="review"
@@ -477,6 +489,15 @@ export function SessionSidePanel(props: {
                             </div>
                           </Show>
 
+                          <Show when={activeTab() === SESSION_PREVIEW_TAB}>
+                            <Tabs.Content
+                              value={SESSION_PREVIEW_TAB}
+                              class="flex flex-col h-full overflow-hidden contain-strict"
+                            >
+                              <SessionPreviewTab />
+                            </Tabs.Content>
+                          </Show>
+
                           <Show when={activeTab() === "empty"}>
                             <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
                               <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
@@ -559,6 +580,11 @@ export function SessionSidePanel(props: {
                                   {toggle()(activeTab() === SESSION_OPEN_FILE_TAB)}
                                 </div>
                               )}
+                            </Show>
+                            <Show when={previewConfig.siteMode()}>
+                              <Tabs.Trigger value={SESSION_PREVIEW_TAB} id={previewTabID}>
+                                {language.t("session.tab.preview")}
+                              </Tabs.Trigger>
                             </Show>
                             <Show when={reviewTab() && props.canReview()}>
                               <Tabs.Trigger
@@ -703,6 +729,15 @@ export function SessionSidePanel(props: {
                           >
                             {props.reviewPanel()}
                           </div>
+                        </Show>
+
+                        <Show when={activeTab() === SESSION_PREVIEW_TAB}>
+                          <Tabs.Content
+                            value={SESSION_PREVIEW_TAB}
+                            class="flex flex-col h-full overflow-hidden contain-strict"
+                          >
+                            <SessionPreviewTab />
+                          </Tabs.Content>
                         </Show>
 
                         <Show when={activeTab() === "empty"}>

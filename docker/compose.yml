@@ -1,0 +1,19 @@
+# One container per client site.
+services:
+  site:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "4096:4096"
+    environment:
+      # Without this the editor is open to anyone who can reach the port.
+      OPENCODE_SERVER_PASSWORD: "${OPENCODE_SERVER_PASSWORD:?set a password}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+    volumes:
+      - site:/workspace
+    restart: unless-stopped
+
+volumes:
+  site:
