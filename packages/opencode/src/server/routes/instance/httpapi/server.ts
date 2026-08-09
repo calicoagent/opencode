@@ -69,11 +69,15 @@ import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/loca
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import {
+  FILES_PREFIX,
   PREVIEW_AGENTS_PATH,
   PREVIEW_CONFIG_PATH,
   PREVIEW_PREFIX,
+  deleteFileEffect,
   previewConfigEffect,
   readAgentsEffect,
+  readFileEffect,
+  writeFileEffect,
   servePreviewEffect,
   writeAgentsEffect,
 } from "@/server/shared/preview"
@@ -205,6 +209,11 @@ const previewRoute = HttpRouter.use((router) =>
     // The wildcard also matches the bare `/preview`, which serves index.html.
     yield* router.add("GET", `${PREVIEW_PREFIX}/*`, (request) => servePreviewEffect(request))
     yield* router.add("GET", PREVIEW_CONFIG_PATH, () => previewConfigEffect())
+    // The wildcard also matches the bare `/files`, which lists the directory.
+    yield* router.add("GET", `${FILES_PREFIX}/*`, (request) => readFileEffect(request))
+    yield* router.add("PUT", `${FILES_PREFIX}/*`, (request) => writeFileEffect(request))
+    yield* router.add("POST", `${FILES_PREFIX}/*`, (request) => writeFileEffect(request))
+    yield* router.add("DELETE", `${FILES_PREFIX}/*`, (request) => deleteFileEffect(request))
     yield* router.add("GET", PREVIEW_AGENTS_PATH, () => readAgentsEffect())
     yield* router.add("PUT", PREVIEW_AGENTS_PATH, (request) => writeAgentsEffect(request))
   }),

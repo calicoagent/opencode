@@ -10,9 +10,34 @@ one-page website on the right, and an editable brief the assistant follows.
 | --- | --- |
 | `GET /preview/*` — serves the project directory as a website (`/preview` → `index.html`) | `packages/opencode/src/server/shared/preview.ts` |
 | `GET`/`PUT /preview-agents` — read and write the project's `AGENTS.md` | same file |
+| `GET`/`PUT`/`POST`/`DELETE /files/*` — flat file API over the site, for external agents | same file |
 | Routes mounted ahead of the SPA catch-all | `packages/opencode/src/server/routes/instance/httpapi/server.ts` |
 | Preview + brief panes in the web UI | `packages/app` |
 | Container that boots straight into this mode | `Dockerfile`, `docker/` |
+
+## File API for external agents
+
+The site directory is editable over plain HTTP, so an agent that is not
+opencode can drive the site directly. Every path resolves inside the site
+directory; anything escaping it is refused.
+
+```sh
+BASE=http://localhost:4096
+AUTH='-u opencode:yourpassword'   # any username; the password is OPENCODE_SERVER_PASSWORD
+
+curl $AUTH $BASE/files                               # {"root":"/workspace","files":[...]}
+curl $AUTH $BASE/files/index.html                    # raw file
+curl $AUTH -X PUT --data-binary @page.html $BASE/files/index.html
+curl $AUTH -X DELETE $BASE/files/old.html
+curl $AUTH $BASE/preview-agents                      # the brief
+curl $AUTH -X PUT --data-binary @brief.md $BASE/preview-agents
+```
+
+`PUT` creates parent directories and returns `{"ok":true,"path":…,"bytes":…}`.
+`POST` does the same as `PUT`. Bodies are raw file contents — no JSON envelope,
+no partial edits. Listing skips `.git`, `node_modules` and `.opencode`.
+
+Anything written this way is served immediately at `/preview/<path>`.
 
 The preview root is the server's working directory, or `OPENCODE_PREVIEW_ROOT`
 when set. Paths that escape the root are refused with a 404.
